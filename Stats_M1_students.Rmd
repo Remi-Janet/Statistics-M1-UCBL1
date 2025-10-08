@@ -1,0 +1,225 @@
+---
+title: "Master 1 - Neurosciences"
+output: html_notebook
+---
+
+
+Task design
+```{r}
+knitr::include_graphics("D:/Lecture/Rstats M1/TaskDesign.png")
+```
+
+Load dataset
+```{r}
+mydata <- read.csv("D:\\Lecture\\Rstats M1\\Data_MotivaSocial.csv" , head = TRUE, sep=",")
+print(mydata)
+```
+
+Load packages we will need
+```{r}
+install.packages("nortest")
+library(nortest)
+install.packages("ggplot2")
+library(ggplot2)
+install.packages("ggpubr")
+library(ggpubr)
+install.packages("outliers")
+install.packages("car")
+```
+
+Explore data (demographic) - Example with the total information request
+```{r}
+# count patient number (same for healthy control)
+cat("N(Patient) =", sum(mydata$subCond == 1), "\n")
+cat("N(Control) =", sum(mydata$subCond == 0), "\n")
+
+# histogram distribution
+h1 = hist(mydata$Info_tot, breaks=30, plot=FALSE)
+plot(h1, ylim=c(-30, 30), col="gray80")
+
+# qq-plot
+ggqqplot(mydata$Info_tot)
+
+# boxplot of the Percentage of information requested
+boxplot(mydata$Info_tot, main = "Boxplot - Percentage of information requested")
+
+# create pie chart showing mean and complementary part (to 100 for visualization)
+mean_info <- mean(mydata$Info_tot, na.rm = TRUE)
+other_part <- 1 - mean_info
+
+values <- c(mean_info, other_part)
+labels <- c("More info", "No info")
+colors <- c("skyblue", "gray")
+
+pie(values, labels = labels, col = colors, main = "Pie Chart - Percentage of information requested")
+```
+1/ Do schizophrenic patients request more information than healthy controls?
+We hypothesize that there is a difference in the amount of information requested between schizophrenic patients and healthy controls. We hypothesize that schizophrenic patients request less information than healthy controls due to deficits in directed exploration and increased aversion to uncertainty.
+
+a- Assumptions check
+```{r}
+# Normality test
+shapiro.test(mydata$Info_tot[mydata$subCond == 0])
+shapiro.test(mydata$Info_tot[mydata$subCond == 1])
+
+# Bartlett test (variance equality for two groups)
+bartlett.test(mydata$Info_tot ~ mydata$subCond, data = mydata)
+```
+Conclusion, the variables meet the assumptions, they are not significantly different from a normal distribution (Shapiro-Wilk test p-value > 0.05), and their variances are equal (Bartlett test p-value > 0.05). We can perform a parametric test.
+The two samples are independent (the values in one sample (control sample) reveal no information about those of the other sample (schizophrenic sample)).
+
+b- Perform statistical comparison
+```{r}
+t.test(Info_tot ~ subCond, data = mydata, var.equal = TRUE)
+```
+We can conclude that schizophrenic patients request more information than healthy controls.
+
+c- Plot the data
+```{r}
+library(ggplot2)
+library(ggsignif)
+
+ggplot(mydata, aes(x = factor(subCond), y = Info_tot, fill = factor(subCond))) +
+  geom_violin(alpha = 0.6) +
+  geom_jitter(width = 0.1) +
+  scale_x_discrete(labels = c("Control", "Schizophrenic")) +
+  labs(x = "Group", y = "Ratio of Information seeking (a.u.)", fill = "Group") +
+  geom_signif(
+    comparisons = list(c("0", "1")),
+    annotations = "**",         # Use double asterisks here instead of *
+    y_position = max(mydata$Info_tot, na.rm = TRUE) + 0.1,
+    tip_length = 0.03
+  ) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "black")
+  )
+
+```
+Your turn to play!
+
+2/1. Do schizophrenic patients request more information in the social context than in the non-social context?
+a- Assumption check
+```{r}
+
+```
+b- Perform statistical comparison
+```{r}
+
+```
+c- Plot the data
+```{r}
+
+```
+
+```{r}
+
+
+```
+
+2/2. Same thing for healthy individuals?
+```{r}
+
+```
+
+
+
+2/3. ANOVA two-factors
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+
+3/ Is mental well-being linked to the overall information-seeking behavior?
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+Summarizing the mean and STD/SEM for all the group and variables
+```{r}
+library(dplyr)
+library(tidyr)
+
+sem <- function(x) {
+  sd(x, na.rm = TRUE) / sqrt(sum(!is.na(x)))
+}
+
+vars_to_summarize <- c("Engagement_tot", "Engagement_nonsocial_tot", "Engagement_social_tot",
+                       "Info_tot", "Info_nonsocial_tot", "Info_social_tot")
+
+Data_summarized <- mydata %>%
+  select(all_of(vars_to_summarize), subCond) %>%
+  pivot_longer(cols = all_of(vars_to_summarize), names_to = "Variable", values_to = "Value")
+
+# Summarize full sample and add sample name to variable
+summary_full <- Data_summarized %>%
+  group_by(Variable) %>%
+  summarise(
+    mean = mean(Value, na.rm = TRUE),
+    std = sd(Value, na.rm = TRUE),
+    sem = sem(Value),
+    min = min(Value, na.rm = TRUE),
+    max = max(Value, na.rm = TRUE)
+  ) %>%
+  mutate(Variable = paste(Variable, "(Full Sample)"))
+
+# Summarize subset subCond == 1 and add sample name to variable
+summary_subcond1 <- Data_summarized %>%
+  filter(subCond == 1) %>%
+  group_by(Variable) %>%
+  summarise(
+    mean = mean(Value, na.rm = TRUE),
+    std = sd(Value, na.rm = TRUE),
+    sem = sem(Value),
+    min = min(Value, na.rm = TRUE),
+    max = max(Value, na.rm = TRUE)
+  ) %>%
+  mutate(Variable = paste(Variable, "(Schyzophrenic)"))
+
+# Summarize subset subCond == 0 and add sample name to variable
+summary_subcond0 <- Data_summarized %>%
+  filter(subCond == 0) %>%
+  group_by(Variable) %>%
+  summarise(
+    mean = mean(Value, na.rm = TRUE),
+    std = sd(Value, na.rm = TRUE),
+    sem = sem(Value),
+    min = min(Value, na.rm = TRUE),
+    max = max(Value, na.rm = TRUE)
+  ) %>%
+  mutate(Variable = paste(Variable, "(Healthy control)"))
+
+# Combine (stack) summaries
+summary_combined <- bind_rows(summary_full, summary_subcond1, summary_subcond0) %>%
+  arrange(Variable)
+
+print(summary_combined)
+```
+
+Choose the adequat statistical test
+```{r}
+knitr::include_graphics("D:/Lecture/Rstats M1/stats_tests_tree.png")
+```
+
+
+
