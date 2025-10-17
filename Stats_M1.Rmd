@@ -1,0 +1,419 @@
+---
+title: "Master 1 - Neurosciences 2025"
+output: html_notebook
+---
+
+
+Task design
+```{r}
+knitr::include_graphics("D:/Lecture/Rstats M1/TaskDesign.png")
+```
+
+Load dataset
+```{r}
+mydata <- read.csv("D:\\Lecture\\Rstats M1\\Data_MotivaSocial.csv" , head = TRUE, sep=",")
+print(mydata)
+```
+
+Load packages we will need
+```{r}
+install.packages("nortest")
+library(nortest)
+install.packages("ggplot2")
+library(ggplot2)
+install.packages("ggpubr")
+library(ggpubr)
+install.packages("outliers")
+install.packages("car")
+```
+
+Explore data (demographic) - Example with the total information request
+```{r}
+# count patient number (same for healthy control)
+cat("N(Patient) =", sum(mydata$subCond == 1), "\n")
+cat("N(Control) =", sum(mydata$subCond == 0), "\n")
+
+# histogram distribution
+h1 = hist(mydata$Info_tot, breaks=30, plot=FALSE)
+plot(h1, ylim=c(-30, 30), col="gray80")
+
+# qq-plot
+ggqqplot(mydata$Info_tot)
+
+# boxplot of the Percentage of information requested
+boxplot(mydata$Info_tot, main = "Boxplot - Percentage of information requested")
+
+# create pie chart showing mean and complementary part (to 100 for visualization)
+mean_info <- mean(mydata$Info_tot, na.rm = TRUE)
+other_part <- 1 - mean_info
+
+values <- c(mean_info, other_part)
+labels <- c("More info", "No info")
+colors <- c("skyblue", "gray")
+
+pie(values, labels = labels, col = colors, main = "Pie Chart - Percentage of information requested")
+```
+1/ Do schizophrenic patients request more information than healthy controls?
+We hypothesize that there is a difference in the amount of information requested between schizophrenic patients and healthy controls. We hypothesize that schizophrenic patients request less information than healthy controls due to deficits in directed exploration and increased aversion to uncertainty.
+
+a- Assumptions check
+```{r}
+# Normality test
+shapiro.test(mydata$Info_tot[mydata$subCond == 0])
+shapiro.test(mydata$Info_tot[mydata$subCond == 1])
+
+# Bartlett test (variance equality for two groups)
+bartlett.test(mydata$Info_tot ~ mydata$subCond, data = mydata)
+```
+Conclusion, the variables meet the assumptions, they are not significantly different from a normal distribution (Shapiro-Wilk test p-value > 0.05), and their variances are equal (Bartlett test p-value > 0.05). We can perform a parametric test.
+The two samples are independent (the values in one sample (control sample) reveal no information about those of the other sample (schizophrenic sample)).
+
+b- Perform statistical comparison
+```{r}
+t.test(Info_tot ~ subCond, data = mydata, var.equal = TRUE)
+```
+We can conclude that schizophrenic patients request more information than healthy controls.
+
+c- Plot the data
+```{r}
+library(ggplot2)
+library(ggsignif)
+
+ggplot(mydata, aes(x = factor(subCond), y = Info_tot, fill = factor(subCond))) +
+  geom_violin(alpha = 0.6) +
+  geom_jitter(width = 0.1) +
+  scale_x_discrete(labels = c("Control", "Schizophrenic")) +
+  labs(x = "Group", y = "Ratio of Information seeking (a.u.)", fill = "Group") +
+  geom_signif(
+    comparisons = list(c("0", "1")),
+    annotations = "**",         # Use double asterisks here instead of *
+    y_position = max(mydata$Info_tot, na.rm = TRUE) + 0.1,
+    tip_length = 0.03
+  ) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "black")
+  )
+
+```
+
+2/1. Do schizophrenic patients request more information in the social context than in the non-social context?
+a- Assumption check
+```{r}
+library(tidyr)
+library(dplyr)
+
+# Normality test
+shapiro.test(mydata$Info_social_tot[mydata$subCond == 1])
+shapiro.test(mydata$Info_nonsocial_tot[mydata$subCond == 1])
+
+# Subset data for subCond == 1 (Schizophrenic patient)
+subset_data <- mydata %>% filter(subCond == 1)
+
+# Convert from wide to long format
+long_data <- subset_data %>%
+  select(Info_social_tot, Info_nonsocial_tot) %>%
+  pivot_longer(cols = c(Info_social_tot, Info_nonsocial_tot),
+               names_to = "Condition",
+               values_to = "InfoValue")
+
+# Bartlett test 
+bartlett.test(InfoValue ~ Condition, data = long_data)
+```
+Conclusion, the variables meet the assumptions, they are not significantly different from a normal distribution (Shapiro-Wilk test p-value > 0.05), and their variances are equal (Bartlett test p-value > 0.05). We can perform a parametric test.
+The two samples are paired.
+
+b- Perform statistical comparison
+```{r}
+t.test(mydata$Info_social_tot[mydata$subCond == 1], 
+       mydata$Info_nonsocial_tot[mydata$subCond == 1], 
+       paired = TRUE)
+```
+We can conclude that schizophrenic patients request more information in the non social condition than in the social condition.
+
+c- Plot the data
+```{r}
+library(ggplot2)
+library(ggsignif)
+
+ggplot(long_data, aes(x = factor(Condition), y = InfoValue, fill = factor(Condition))) +
+  geom_violin(alpha = 0.6) +
+  geom_jitter(width = 0.1) +
+  scale_x_discrete(labels = c("Non-social", "Social")) +
+  labs(x = "Context", y = "Ratio of Information seeking in schizophrenic patient (a.u.)", fill = "Context") +
+  geom_signif(
+    comparisons = list(c("Info_nonsocial_tot", "Info_social_tot")),
+    annotations = "*",         # Use double asterisks here instead of *
+    y_position = max(long_data$InfoValue, na.rm = TRUE) + 0.1,
+    tip_length = 0.03
+  ) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "black")
+  )
+```
+
+```{r}
+library(ggplot2)
+library(ggsignif)
+
+ggplot(long_data, aes(x = factor(Condition), y = InfoValue, fill = factor(Condition))) +
+  geom_boxplot(alpha = 0.6) +
+  geom_jitter(width = 0.1) +
+  scale_x_discrete(labels = c("Non-social", "Social")) +
+  labs(x = "Context", y = "Ratio of Information seeking in schizophrenic patient (a.u.)", fill = "Context") +
+  geom_signif(
+    comparisons = list(c("Info_nonsocial_tot", "Info_social_tot")),
+    annotations = "*",         # Use double asterisks here instead of *
+    y_position = max(long_data$InfoValue, na.rm = TRUE) + 0.1,
+    tip_length = 0.03
+  ) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "black")
+  )
+
+```
+
+2/2. Same thing for healthy individuals?
+```{r}
+library(tidyr)
+library(dplyr)
+
+# Normality test
+shapiro.test(mydata$Info_social_tot[mydata$subCond == 0])
+shapiro.test(mydata$Info_nonsocial_tot[mydata$subCond == 0])
+
+# Subset data for subCond == 0 (controls)
+subset_data <- mydata %>% filter(subCond == 0)
+
+# Convert from wide to long format
+long_data <- subset_data %>%
+  select(Info_social_tot, Info_nonsocial_tot) %>%
+  pivot_longer(cols = c(Info_social_tot, Info_nonsocial_tot),
+               names_to = "Condition",
+               values_to = "InfoValue")
+
+# Bartlett test
+bartlett.test(InfoValue ~ Condition, data = long_data)
+
+# perform comparison
+t.test(mydata$Info_social_tot[mydata$subCond == 0], 
+       mydata$Info_nonsocial_tot[mydata$subCond == 0], 
+       paired = TRUE)
+
+# plot the comparison
+ggplot(long_data, aes(x = factor(Condition), y = InfoValue, fill = factor(Condition))) +
+  geom_boxplot(alpha = 0.6) +
+  geom_jitter(width = 0.1) +
+  scale_x_discrete(labels = c("Non-social", "Social")) +
+  labs(x = "Context", y = "Ratio of Information seeking in controls (a.u.)", fill = "Context") +
+  geom_signif(
+    comparisons = list(c("Info_nonsocial_tot", "Info_social_tot")),
+    annotations = "n.s.",         # Use double asterisks here instead of *
+    y_position = max(long_data$InfoValue, na.rm = TRUE) + 0.1,
+    tip_length = 0.03
+  ) +
+  theme_bw() +
+  theme(panel.border = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "black")
+  )
+```
+
+
+
+2/3. ANOVA two-factors
+```{r}
+library(tidyr)
+library(dplyr)
+library(car)
+
+# Convert from wide to long format
+long_data <- mydata %>%
+  select(sub, subCond, Info_social_tot, Info_nonsocial_tot) %>%
+  pivot_longer(cols = c(Info_social_tot, Info_nonsocial_tot), 
+               names_to = "Condition", values_to = "Score")
+
+# Ensure factors
+long_data <- long_data %>%
+  mutate(subCond = factor(subCond),
+         Condition = factor(Condition))
+
+# Check the homogeneity of variances across the different groups defined by your factors
+leveneTest(Score ~ Condition*subCond, data = long_data)
+
+# Two-way ANOVA
+anova_model <- aov(Score ~ subCond * Condition + (1|sub), data = long_data)
+summary(anova_model)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Aggregate means by subCond
+mean_subCond <- long_data %>%
+  group_by(subCond) %>%
+  summarize(mean_Score = mean(Score), sd = sd(Score), n = n()) %>%
+  mutate(se = sd / sqrt(n))
+
+ggplot(mean_subCond, aes(x = subCond, y = mean_Score)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_errorbar(aes(ymin = mean_Score - se, ymax = mean_Score + se), width = 0.2) +
+  labs(title = "Main Effect of subCond", y = "Ratio of Information seeking (a.u.)") +
+  scale_x_discrete(labels = c("Controls", "Schyzophrenic"))
+
+# Aggregate means by Condition
+mean_Condition <- long_data %>%
+  group_by(Condition) %>%
+  summarize(mean_Score = mean(Score), sd = sd(Score), n = n()) %>%
+  mutate(se = sd / sqrt(n))
+
+ggplot(mean_Condition, aes(x = Condition, y = mean_Score)) +
+  geom_bar(stat = "identity", fill = "darkgreen") +
+  geom_errorbar(aes(ymin = mean_Score - se, ymax = mean_Score + se), width = 0.2) +
+  labs(title = "Main Effect of Condition", y = "Ratio of Information seeking (a.u.)")
+```
+
+```{r}
+levels(long_data$subCond) <- c("Control", "Schyzophrenic") 
+interaction.plot(x.factor = long_data$subCond,
+                 trace.factor = long_data$Condition,
+                 response = long_data$Score,
+                 fun = mean,
+                 type = "b",
+                 xlab = "subCond",
+                 ylab = "Mean Score",
+                 trace.label = "Condition",
+                 col = c("red", "blue"),
+                 pch = c(1, 19))
+
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Calculate means and standard errors for each subCond * Condition combination
+interaction_means <- long_data %>%
+  group_by(subCond, Condition) %>%
+  summarize(mean_Score = mean(Score), sd = sd(Score), n = n()) %>%
+  mutate(se = sd / sqrt(n))
+
+# Plot interaction as grouped bar graph
+ggplot(interaction_means, aes(x = subCond, y = mean_Score, fill = Condition)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8), color = "black") +
+  geom_errorbar(aes(ymin = mean_Score - se, ymax = mean_Score + se),
+                position = position_dodge(width = 0.8), width = 0.2) +
+  labs(title = "Interaction Plot: subCond * Condition",
+       x = "subCond",
+       y = "Mean Score") +
+  theme_minimal()
+```
+
+
+
+3/ Is mental well-being linked to the overall information-seeking behavior?
+```{r}
+# Normality test
+shapiro.test(mydata$Info_tot)
+shapiro.test(mydata$Health)
+```
+
+```{r}
+# perform Spearman correlation
+res <- cor.test(mydata$Info_tot, mydata$Health, method = "spearman")
+print(res)
+
+library(ggplot2)
+# Plot with points, regression line, confidence interval, and annotation of Spearman rho
+ggplot(mydata, aes(x = Info_tot, y = Health)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "blue", fill = "lightblue", se = TRUE) +  # regression line + 95% CI
+  annotate("text", x = 0.2, y = -Inf, hjust = 1.1, vjust = -0.5,
+           label = paste0("Spearman's rho = ", round(res$estimate, 3), "\n", 
+                          "p = ", signif(res$p.value, 3)),
+           size = 4) +
+  labs(title = "Scatter plot with Spearman correlation and regression line",
+       x = "Info_tot",
+       y = "Health") +
+  theme_minimal()
+```
+
+
+Summarizing the mean and STD/SEM for all the group and variables
+```{r}
+library(dplyr)
+library(tidyr)
+
+sem <- function(x) {
+  sd(x, na.rm = TRUE) / sqrt(sum(!is.na(x)))
+}
+
+vars_to_summarize <- c("Engagement_tot", "Engagement_nonsocial_tot", "Engagement_social_tot",
+                       "Info_tot", "Info_nonsocial_tot", "Info_social_tot")
+
+Data_summarized <- mydata %>%
+  select(all_of(vars_to_summarize), subCond) %>%
+  pivot_longer(cols = all_of(vars_to_summarize), names_to = "Variable", values_to = "Value")
+
+# Summarize full sample and add sample name to variable
+summary_full <- Data_summarized %>%
+  group_by(Variable) %>%
+  summarise(
+    mean = mean(Value, na.rm = TRUE),
+    std = sd(Value, na.rm = TRUE),
+    sem = sem(Value),
+    min = min(Value, na.rm = TRUE),
+    max = max(Value, na.rm = TRUE)
+  ) %>%
+  mutate(Variable = paste(Variable, "(Full Sample)"))
+
+# Summarize subset subCond == 1 and add sample name to variable
+summary_subcond1 <- Data_summarized %>%
+  filter(subCond == 1) %>%
+  group_by(Variable) %>%
+  summarise(
+    mean = mean(Value, na.rm = TRUE),
+    std = sd(Value, na.rm = TRUE),
+    sem = sem(Value),
+    min = min(Value, na.rm = TRUE),
+    max = max(Value, na.rm = TRUE)
+  ) %>%
+  mutate(Variable = paste(Variable, "(Schyzophrenic)"))
+
+# Summarize subset subCond == 0 and add sample name to variable
+summary_subcond0 <- Data_summarized %>%
+  filter(subCond == 0) %>%
+  group_by(Variable) %>%
+  summarise(
+    mean = mean(Value, na.rm = TRUE),
+    std = sd(Value, na.rm = TRUE),
+    sem = sem(Value),
+    min = min(Value, na.rm = TRUE),
+    max = max(Value, na.rm = TRUE)
+  ) %>%
+  mutate(Variable = paste(Variable, "(Healthy control)"))
+
+# Combine (stack) summaries
+summary_combined <- bind_rows(summary_full, summary_subcond1, summary_subcond0) %>%
+  arrange(Variable)
+
+print(summary_combined)
+```
+
+Choose the adequat statistical test
+```{r}
+knitr::include_graphics("D:/Lecture/Rstats M1/stats_tests_tree.png")
+```
+
+
+
